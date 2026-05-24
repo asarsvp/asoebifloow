@@ -2351,7 +2351,7 @@ const SEED_TASKS=[{"task": "Hold core family planning meeting", "owner": "Overal
 
 /* ── LOAD: localStorage first (instant), then Supabase if configured ── */
 async function load() {
-  // Always load from localStorage first (instant, offline-safe)
+  // 1. Load localStorage immediately (instant)
   try {
     const d = JSON.parse(localStorage.getItem('asoebi_clean_v2')||'{}');
     guests        = d.guests        || [];
@@ -2368,39 +2368,60 @@ async function load() {
   if (!tasks.length)         tasks         = SEED_TASKS.map(t=>({...t,id:uid()}));
   vendors = vendors.map(v=>({...v,contact:v.contact||'',email:v.email||''}));
 
-  // Try Supabase sync if configured
+  // 2. Render immediately with local data
+  renderAll();
+
+  // 3. Connect to Supabase — always try, retry up to 3 times
   SUPA_ENABLED = !!(SUPABASE_URL && SUPABASE_ANON && SUPABASE_URL.startsWith('https'));
 
   if (SUPA_ENABLED) {
     setSyncStatus('🔄 Syncing from Supabase…');
-    try {
-      // Get event ID
-      const evts = await supa.get('events', `slug=eq.${EVENT_SLUG}&select=id`);
-      if (evts && evts[0]) {
-        EVENT_ID = evts[0].id;
 
-        const [dbGuests, dbVendors, dbContribs, dbTasks] = await Promise.all([
-          supa.get('guests',        `event_id=eq.${EVENT_ID}&select=*`),
-          supa.get('vendors',       `event_id=eq.${EVENT_ID}&select=*`),
-          supa.get('contributions', `event_id=eq.${EVENT_ID}&select=*`),
-          supa.get('tasks',         `event_id=eq.${EVENT_ID}&order=sort_order&select=*`)
-        ]);
+    // Retry logic — try up to 3 times with 2 second delay
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        const evts = await supa.get('events', 'slug=eq.' + EVENT_SLUG + '&select=id');
+        if (evts && evts[0]) {
+          EVENT_ID = evts[0].id;
 
-        if (dbGuests.length)   guests        = dbGuests.map(dbToGuest);
-        if (dbVendors.length)  vendors       = dbVendors.map(v=>({...v,contact:v.contact||'',email:v.email||''}));
-        if (dbContribs.length) contributions = dbContribs;
-        if (dbTasks.length)    tasks         = dbTasks;
+          const [dbGuests, dbVendors, dbContribs, dbTasks] = await Promise.all([
+            supa.get('guests',        'event_id=eq.' + EVENT_ID + '&select=*'),
+            supa.get('vendors',       'event_id=eq.' + EVENT_ID + '&select=*'),
+            supa.get('contributions', 'event_id=eq.' + EVENT_ID + '&select=*'),
+            supa.get('tasks',         'event_id=eq.' + EVENT_ID + '&order=sort_order&select=*')
+          ]);
 
-        setSyncStatus('✓ Synced', 'ok');
+          // Supabase is master — always overwrite local
+          if (dbGuests  && dbGuests.length)  guests        = dbGuests.map(dbToGuest);
+          if (dbVendors && dbVendors.length) vendors       = dbVendors.map(v=>({...v,contact:v.contact||'',email:v.email||''}));
+          if (dbContribs&& dbContribs.length)contributions = dbContribs;
+          if (dbTasks   && dbTasks.length)   tasks         = dbTasks;
+
+          _saveLocal();  // cache to localStorage
+          renderAll();   // re-render with Supabase data
+          setSyncStatus('✓ Synced', 'ok');
+          break;         // success — stop retrying
+        } else {
+          // Event not found — create it automatically
+          const newEvt = await supa.upsert('events', [{
+            slug: EVENT_SLUG,
+            name: 'Celebration of Life — Oyefemi Asa',
+            event_date: '2026-06-05',
+            venue: 'Regal Hall (Annex), Oregun, Ikeja, Lagos'
+          }]);
+          // Retry after creating
+          retries--;
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      } catch(e) {
+        retries--;
+        console.warn('Supabase sync attempt failed:', e);
+        if (retries > 0) await new Promise(r => setTimeout(r, 2000));
+        else setSyncStatus('⚠ Offline — using local data', 'err');
       }
-    } catch(e) {
-      setSyncStatus('⚠ Offline — using local data', 'err');
-      console.warn('Supabase sync failed:', e);
     }
   }
-
-  _saveLocal();
-  renderAll();
 }
 
 /* ── SAVE: localStorage immediately, Supabase async ──────────────── */

@@ -707,21 +707,16 @@ function clearImport(){
 /* Guest tab display: show RSVP + payment together */
 function renderGuests(){
   const q=($('searchGuest')?.value||'').toLowerCase(), h=$('filterHost')?.value||'';
-  const list=(guests||[]).filter(g=>(!h||g.host===h)&&(!q||[g.name,g.phone,g.email,g.accessCode,g.host,g.table,g.paymentStatus,g.rsvpStatus,g.paymentRef].join(' ').toLowerCase().includes(q)));
+  const list=(guests||[]).filter(g=>(!h||g.host===h)&&(!q||[g.name,g.phone,g.email,g.accessCode,g.host].join(' ').toLowerCase().includes(q)));
   if($('guestCount')) $('guestCount').textContent=`${list.length} / ${guests.length}`;
   if($('guestRows')) $('guestRows').innerHTML=list.map(g=>`<tr>
-    <td><b>${esc(g.name)}</b><br><small>${esc(g.phone||'No phone')} · ${esc(g.accessCode)}</small></td>
+    <td><b>${esc(g.name)}</b><br><small style="color:var(--slate)">${esc(g.accessCode||'')}</small></td>
     <td><select onchange="moveHost('${g.id}',this.value)">${HOSTS.map(x=>`<option ${g.host===x?'selected':''}>${esc(x)}</option>`).join('')}</select></td>
-    <td>${esc(g.table||'—')}</td>
-    <td>
-      ${g.rsvpStatus?`<span class="sync-badge rsvp">RSVP: ${esc(g.rsvpStatus)}</span>`:`<span class="sync-badge info">No RSVP</span>`}
-      ${Number(g.amount||0)>0 || g.paymentStatus==='Paid' || g.paymentStatus==='Pending'
-        ?`<br><span class="sync-badge pay">Asoebi: ${esc(g.paymentStatus||'Pending')}</span> ${Number(g.amount||0)>0?`₦${Number(g.amount||0).toLocaleString()}`:''}`
-        :`<br><span class="sync-badge info">No Asoebi</span>`}
-    </td>
-    <td><span class="pill navy">${esc(g.inviteStatus||'Pending')}</span></td>
-    <td>${g.arrived?'<span class="pill ok">Arrived</span>':'<span class="pill warn">Not yet</span>'}</td>
+    <td style="font-size:12px">${g.email?`<span style="color:#1565c0">✉ ${esc(g.email)}</span>`:'<span style="color:#c62828">No email</span>'}</td>
+    <td style="font-size:12px">${g.phone?`<span style="color:#2e7d32">📱 ${esc(g.phone)}</span>`:'<span style="color:#c62828">No phone</span>'}</td>
+    <td>${g.arrived?'<span class="pill ok">Arrived</span>':'<span class="pill warn">Expected</span>'}</td>
     <td><button class="btn ghost sm" onclick="selectedGuestId='${g.id}';showTab('invites')">Card</button></td>
+    <td><button class="btn red sm" onclick="deleteGuest('${g.id}')">🗑 Delete</button></td>
   </tr>`).join('');
   if(typeof updateGuestFilterSummary==='function') updateGuestFilterSummary();
 }
@@ -2072,8 +2067,8 @@ main{max-width:1180px;margin:auto;padding:18px 16px 70px}.panel{display:none}.pa
 <div class="top"><div class="topbar"><div class="brand"><svg id="topCrest" onclick="crestTap()" viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="31" fill="url(#tl1)"/><path d="M20 46 L32 18 L44 46 M24.5 37 L39.5 37" stroke="#0e1f3d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="tl1" x1="0" y1="0" x2="64" y2="64"><stop offset="0%" stop-color="#e8cc7a"/><stop offset="100%" stop-color="#c09a30"/></linearGradient></defs></svg><div><h1>Asoebifloow</h1><small>Event Operations Platform</small></div></div><div class="right"><span class="badge" id="roleBadge">Guest</span><button class="exit" onclick="signOut()">✕ Exit</button></div></div><div class="nav" id="nav"></div></div>
 <main>
 <section class="panel on" id="overview"><div class="hero"><div class="eyebrow">✦ Celebration of Life · Live Operations</div><h2>Oyefemi Asa <span style="font-size:18px;color:rgba(255,255,255,.55)">(Bobtomo)</span></h2><p>Friday, 5th June 2026 · 1:00 PM · Regal Hall (Annex), Oregun, Ikeja, Lagos</p></div><div class="grid4" id="stats"></div><div class="card"><h3>Guest Of Summary</h3><div class="body" id="hostSummary"></div></div></section>
-<section class="panel" id="guests"><div class="card"><h3>Family Admin Guest Section <span class="pill gold">Import · Review · Assign</span></h3><div class="body"><div class="row"><div class="field"><label>Full Name *</label><input id="gName" placeholder="Guest full name"></div><div class="field"><label>Phone / WhatsApp</label><input id="gPhone" placeholder="+234..."></div></div><div class="row"><div class="field"><label>Email</label><input id="gEmail" placeholder="email@example.com"></div><div class="field"><label>Guest Of *</label><select id="gHost"></select></div></div><div class="row"><div class="field"><label>Payment Status</label><select id="gPay"><option>Unknown</option><option>Paid</option><option>Pending</option><option>Not Paid</option></select></div><div class="field"><label>Amount</label><input id="gAmt" type="number" placeholder="0"></div></div><div class="btns"><button class="btn navy" onclick="addGuest()">+ Add Guest</button><button class="btn ghost" onclick="exportGuests()">⬇ Export Guests</button></div></div></div><div class="card"><h3>Import RSVP / Payment Excel or CSV</h3><div class="body"><div class="import-help"><b>Smart RSVP + Payment Sync:</b> Upload RSVP, payment/asoebi, or combined Excel/CSV files. The system merges by phone first, then name + Guest Of. RSVP-only guests are kept, payment-only guests are added, duplicates are merged, and blank imported fields will not overwrite existing good data.</div><div class="row"><div class="field"><label>Upload File</label><input type="file" id="importFile" accept=".csv,.xlsx,.xls"></div><div class="field"><label>Default Guest Of if missing</label><select id="importHost"></select></div></div><div class="btns"><button class="btn gold" onclick="previewImport()">🔎 Preview Import</button><button class="btn navy" onclick="confirmImport()">✅ Import Approved Rows</button><button class="btn ghost" onclick="clearImport()">Clear</button></div><div id="importInfo" style="margin-top:10px;color:var(--slate);font-size:12px"></div><div id="importReview" class="table-wrap" style="margin-top:10px"></div></div></div><div class="card"><h3>Guest List <span id="guestCount" class="pill navy"></span></h3><div class="body"><div class="row"><input class="search" id="searchGuest" placeholder="Search name, phone, code..." oninput="renderGuests()"><select class="search" id="filterHost" onchange="renderGuests()"></select></div><div id="guestFilterSummary" class="guest-filter-summary"></div></div><div class="table-wrap"><table class="gt"><thead><tr><th>Name</th><th>Guest Of</th><th>Table</th><th>Contact</th><th>Invite</th><th>Arrival</th><th>Actions</th></tr></thead><tbody id="guestRows"></tbody></table></div></div></section>
-<section class="panel" id="invites"><div class="invite-layout"><div><div class="card"><h3>Invite Centre <span id="selCount" class="pill gold">0 selected</span></h3><div class="body"><div class="field"><label>Filter by Guest Of</label><select id="inviteHost" onchange="renderInvites()"></select></div><div class="btns"><button class="btn ghost sm" onclick="selectAllInvites()">Select All</button><button class="btn ghost sm" onclick="clearSelection()">Clear</button><button class="btn green sm" onclick="batchWhatsApp()">💬 WhatsApp</button><button class="btn navy sm" onclick="batchEmail()">📧 Email</button><button class="btn ghost sm" onclick="downloadAllCards()">⬇ Cards Only</button></div></div><div class="body listbox" id="inviteList"></div></div></div><div><div class="card"><h3>Access Card Preview <span class="pill navy">Locked Template</span></h3><div class="body"><div id="cardArea"></div><div class="btns" style="margin-top:12px"><button class="btn ghost" onclick="downloadCard()">⬇ Download PNG</button><button class="btn ghost" onclick="printCard()">🖨 Print</button><button class="btn green" onclick="sendSelected('WhatsApp')">💬 Mark WhatsApp Sent</button><button class="btn navy" onclick="sendSelected('Email')">📧 Mark Email Sent</button></div></div></div></div></div></section>
+<section class="panel" id="guests"><div class="card"><h3>Family Admin Guest Section <span class="pill gold">Import · Review · Assign</span></h3><div class="body"><div class="row"><div class="field"><label>Full Name *</label><input id="gName" placeholder="Guest full name"></div><div class="field"><label>Phone / WhatsApp</label><input id="gPhone" placeholder="+234..."></div></div><div class="row"><div class="field"><label>Email</label><input id="gEmail" placeholder="email@example.com"></div><div class="field"><label>Guest Of *</label><select id="gHost"></select></div></div><div class="row"><div class="field"><label>Payment Status</label><select id="gPay"><option>Unknown</option><option>Paid</option><option>Pending</option><option>Not Paid</option></select></div><div class="field"><label>Amount</label><input id="gAmt" type="number" placeholder="0"></div></div><div class="btns"><button class="btn navy" onclick="addGuest()">+ Add Guest</button><button class="btn ghost" onclick="exportGuests()">⬇ Export Guests</button></div></div></div><div class="card"><h3>Import RSVP / Payment Excel or CSV</h3><div class="body"><div class="import-help"><b>Smart RSVP + Payment Sync:</b> Upload RSVP, payment/asoebi, or combined Excel/CSV files. The system merges by phone first, then name + Guest Of. RSVP-only guests are kept, payment-only guests are added, duplicates are merged, and blank imported fields will not overwrite existing good data.</div><div class="row"><div class="field"><label>Upload File</label><input type="file" id="importFile" accept=".csv,.xlsx,.xls"></div><div class="field"><label>Default Guest Of if missing</label><select id="importHost"></select></div></div><div class="btns"><button class="btn gold" onclick="previewImport()">🔎 Preview Import</button><button class="btn navy" onclick="confirmImport()">✅ Import Approved Rows</button><button class="btn ghost" onclick="clearImport()">Clear</button></div><div id="importInfo" style="margin-top:10px;color:var(--slate);font-size:12px"></div><div id="importReview" class="table-wrap" style="margin-top:10px"></div></div></div><div class="card"><h3>Guest List <span id="guestCount" class="pill navy"></span></h3><div class="body"><div class="row"><input class="search" id="searchGuest" placeholder="Search name, phone, code..." oninput="renderGuests()"><select class="search" id="filterHost" onchange="renderGuests()"></select></div><div id="guestFilterSummary" class="guest-filter-summary"></div></div><div class="table-wrap"><table class="gt"><thead><tr><th>Name</th><th>Guest Of</th><th>Email</th><th>Phone Number</th><th>Arrival</th><th colspan="2" style="width:200px">Actions</th></tr></thead><tbody id="guestRows"></tbody></table></div></div></section>
+<section class="panel" id="invites"><div class="invite-layout"><div><div class="card"><h3>Invite Centre <span id="selCount" class="pill gold">0 selected</span></h3><div class="body"><div class="field"><label>Filter by Guest Of</label><select id="inviteHost" onchange="renderInvites()"></select></div><div class="field" style="margin-top:8px"><input id="inviteSearch" type="text" placeholder="Search name, phone or email..." oninput="renderInvites()" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;outline:none;background:var(--bg2)"></div><div class="btns"><button class="btn ghost sm" onclick="selectAllInvites()">Select All</button><button class="btn ghost sm" onclick="clearSelection()">Clear</button><button class="btn green sm" onclick="batchWhatsApp()">💬 WhatsApp</button><button class="btn navy sm" onclick="batchEmail()">📧 Email</button><button class="btn ghost sm" onclick="downloadAllCards()">⬇ Cards Only</button></div></div><div class="body listbox" id="inviteList"></div></div></div><div><div class="card"><h3>Access Card Preview <span class="pill navy">Locked Template</span></h3><div class="body"><div id="cardArea"></div><div class="btns" style="margin-top:12px"><button class="btn ghost" onclick="downloadCard()">⬇ Download PNG</button><button class="btn ghost" onclick="printCard()">🖨 Print</button><button class="btn green" onclick="sendSelected('WhatsApp')">💬 Mark WhatsApp Sent</button><button class="btn navy" onclick="sendSelected('Email')">📧 Mark Email Sent</button></div></div></div></div></div></section>
 <section class="panel" id="seating"><div class="coord-shell"><div class="coord-side"><h3>Coordinator</h3><p>Seating command centre</p><div class="cnav"><button class="on" data-c="overview" onclick="coordTab('overview',this)">📊 Overview</button><button data-c="host" onclick="coordTab('host',this)">👥 By Guest Of</button><button data-c="table" onclick="coordTab('table',this)">🪑 By Table</button><button data-c="hall" onclick="coordTab('hall',this)">🏛 Hall Layout</button></div></div><div class="coord-main" id="coordMain"></div></div></section>
 <section class="panel" id="gate"><div class="gate-shell"><div class="gate-head"><small id="gateWho">Live Gate Station</small><h2>Guest Check-in</h2></div><div class="gate-body"><div style="display:flex;gap:8px"><input class="gate-input" id="gateQ" placeholder="Scan QR / search name / phone / access code" onkeydown="if(event.key==='Enter')gateSearch()" oninput="gateLiveSearch()"><button class="btn green" onclick="gateSearch()">🔍</button></div><div class="btns" style="margin-top:10px"><button class="btn gold sm" onclick="startScanner()">📷 Scan QR</button><button class="btn ghost sm" onclick="clearGate()">Clear</button></div><video id="scanVideo" class="scan-video" playsinline></video><div id="gateResult" class="gate-result"></div></div></div><div class="card"><h3>Walk-in Approval</h3><div class="body"><div class="row"><div class="field"><label>Full Name</label><input id="wiName" placeholder="Walk-in guest name"></div><div class="field"><label>Phone</label><input id="wiPhone" placeholder="Phone"></div></div><div class="field"><label>Guest Of</label><select id="wiHost"></select></div><button class="btn gold" style="width:100%;justify-content:center" onclick="approveWalkin()">✓ Approve Walk-in & Check In</button></div></div><div class="gate-admitted-card"><h3>Admitted Guests <span id="admittedCount" class="pill ok">0</span></h3><div id="admittedList" class="admitted-list"></div></div></section>
 <section class="panel" id="vendors">
@@ -2351,7 +2346,7 @@ const SEED_TASKS=[{"task": "Hold core family planning meeting", "owner": "Overal
 
 /* ── LOAD: localStorage first (instant), then Supabase if configured ── */
 async function load() {
-  // 1. Load localStorage immediately (instant)
+  // Always load from localStorage first (instant, offline-safe)
   try {
     const d = JSON.parse(localStorage.getItem('asoebi_clean_v2')||'{}');
     guests        = d.guests        || [];
@@ -2368,60 +2363,38 @@ async function load() {
   if (!tasks.length)         tasks         = SEED_TASKS.map(t=>({...t,id:uid()}));
   vendors = vendors.map(v=>({...v,contact:v.contact||'',email:v.email||''}));
 
-  // 2. Render immediately with local data
-  renderAll();
-
-  // 3. Connect to Supabase — always try, retry up to 3 times
+  // Try Supabase sync if configured
   SUPA_ENABLED = !!(SUPABASE_URL && SUPABASE_ANON && SUPABASE_URL.startsWith('https'));
 
   if (SUPA_ENABLED) {
     setSyncStatus('🔄 Syncing from Supabase…');
+    try {
+      // Get event ID
+      const evts = await supa.get('events', `slug=eq.${EVENT_SLUG}&select=id`);
+      if (evts && evts[0]) {
+        EVENT_ID = evts[0].id;
 
-    // Retry logic — try up to 3 times with 2 second delay
-    let retries = 3;
-    while (retries > 0) {
-      try {
-        const evts = await supa.get('events', 'slug=eq.' + EVENT_SLUG + '&select=id');
-        if (evts && evts[0]) {
-          EVENT_ID = evts[0].id;
+        const [dbGuests, dbVendors, dbContribs, dbTasks] = await Promise.all([
+          supa.get('guests',        `event_id=eq.${EVENT_ID}&select=*`),
+          supa.get('vendors',       `event_id=eq.${EVENT_ID}&select=*`),
+          supa.get('contributions', `event_id=eq.${EVENT_ID}&select=*`),
+          supa.get('tasks',         `event_id=eq.${EVENT_ID}&order=sort_order&select=*`)
+        ]);
 
-          const [dbGuests, dbVendors, dbContribs, dbTasks] = await Promise.all([
-            supa.get('guests',        'event_id=eq.' + EVENT_ID + '&select=*'),
-            supa.get('vendors',       'event_id=eq.' + EVENT_ID + '&select=*'),
-            supa.get('contributions', 'event_id=eq.' + EVENT_ID + '&select=*'),
-            supa.get('tasks',         'event_id=eq.' + EVENT_ID + '&order=sort_order&select=*')
-          ]);
+        if (dbGuests.length)   guests        = dbGuests.map(dbToGuest);
+        if (dbVendors.length)  vendors       = dbVendors.map(v=>({...v,contact:v.contact||'',email:v.email||''}));
+        if (dbContribs.length) contributions = dbContribs;
+        if (dbTasks.length)    tasks         = dbTasks;
 
-          // Supabase is master — always overwrite local
-          if (dbGuests  && dbGuests.length)  guests        = dbGuests.map(dbToGuest);
-          if (dbVendors && dbVendors.length) vendors       = dbVendors.map(v=>({...v,contact:v.contact||'',email:v.email||''}));
-          if (dbContribs&& dbContribs.length)contributions = dbContribs;
-          if (dbTasks   && dbTasks.length)   tasks         = dbTasks;
-
-          _saveLocal();  // cache to localStorage
-          renderAll();   // re-render with Supabase data
-          setSyncStatus('✓ Synced', 'ok');
-          break;         // success — stop retrying
-        } else {
-          // Event not found — create it automatically
-          const newEvt = await supa.upsert('events', [{
-            slug: EVENT_SLUG,
-            name: 'Celebration of Life — Oyefemi Asa',
-            event_date: '2026-06-05',
-            venue: 'Regal Hall (Annex), Oregun, Ikeja, Lagos'
-          }]);
-          // Retry after creating
-          retries--;
-          await new Promise(r => setTimeout(r, 1500));
-        }
-      } catch(e) {
-        retries--;
-        console.warn('Supabase sync attempt failed:', e);
-        if (retries > 0) await new Promise(r => setTimeout(r, 2000));
-        else setSyncStatus('⚠ Offline — using local data', 'err');
+        setSyncStatus('✓ Synced', 'ok');
       }
+    } catch(e) {
+      setSyncStatus('⚠ Offline — using local data', 'err');
+      console.warn('Supabase sync failed:', e);
     }
   }
+
+  renderAll();
 }
 
 /* ── SAVE: localStorage immediately, Supabase async ──────────────── */
@@ -2474,7 +2447,7 @@ async function previewImport(){let f=$('importFile').files[0];if(!f)return toast
 function previewImportTableOnly(){let mergeCount=importRows.filter(r=>r.decision==='merge').length;let newCount=importRows.filter(r=>r.decision==='import').length;$('importInfo').textContent=`${importRows.length} clean records ready · ${mergeCount} will merge · ${newCount} will import.`}
 function confirmImport(){let imported=0,merged=0,skipped=0;importRows.forEach(r=>{let h=normalizeHost(r.host);if(r.decision==='skip'){skipped++;return}if(!HOSTS.includes(h)){skipped++;return}r.host=h;if(r.decision==='merge'){let existing=guests.find(g=>g.id===r.existingId)||findExistingGuest(r);if(existing){mergeRowData(existing,r);merged++;return}}let g=makeGuest(r);guests.push(g);autoSeatGuest(g);imported++});importRows=[];clearImport();save();renderAll();toast(`${imported} new · ${merged} merged · ${skipped} skipped`,'ok')}function clearImport(){$('importReview').innerHTML='';$('importInfo').textContent='';$('importFile').value=''}
 function autoSeatGuest(g){if(g.table)return;let ts=tables.filter(t=>t.host===g.host);for(let t of ts){let count=guests.filter(x=>x.table===t.code).length;if(count<t.capacity){g.table=t.code;g.seat=String(count+1);return}}let extra={id:uid(),host:g.host,code:`${PFX[g.host]}-${String(ts.length+1).padStart(2,'0')}`,capacity:10,note:''};tables.push(extra);g.table=extra.code;g.seat='1'}function autoSeatAll(){guests.forEach(g=>{if(!g.table)autoSeatGuest(g)})}
-function renderInvites(){let h=$('inviteHost').value||'';let list=guests.filter(g=>sameHost(g.host,h));$('selCount').textContent=`${inviteSel.size} selected`;if(!guests.length){$('inviteList').innerHTML='<p style="color:var(--slate);line-height:1.6">No guests yet. Go to Family Admin → Guest Section, import Excel/CSV or add guests manually.</p>';}else if(!list.length){$('inviteList').innerHTML=`<p style="color:var(--slate);line-height:1.6">No guests under <b>${esc(h)}</b> yet. Check the Guest Of spelling in the import preview or move guests to this Guest Of in the Guest section.</p>`;}else{$('inviteList').innerHTML=list.map(g=>`<div class="guest-chip ${inviteSel.has(g.id)?'sel':''}" onclick="toggleInvite('${g.id}')"><div class="check">${inviteSel.has(g.id)?'✓':''}</div><div class="avatar" style="background:${hostColor(g.host)}">${initials(g.name)}</div><div style="min-width:0"><b>${esc(g.name)}</b><br><small>${esc(normalizeHost(g.host))} · ${esc(g.table||'No table')}</small></div></div>`).join('');if(!selectedGuestId||!guests.find(g=>g.id===selectedGuestId)){selectedGuestId=list[0].id;}}renderCard()}
+function renderInvites(){var h=$('inviteHost').value||'';var se=$('inviteSearch');var q=se?se.value.toLowerCase().trim():'';var list=guests.filter(function(g){return sameHost(g.host,h);});if(q){list=list.filter(function(g){return(g.name||'').toLowerCase().includes(q)||(g.phone||'').toLowerCase().includes(q)||(g.email||'').toLowerCase().includes(q);});}$('selCount').textContent=inviteSel.size+' selected';if(!guests.length){$('inviteList').innerHTML='<p style="color:var(--slate);line-height:1.6">No guests yet.</p>';}else if(!list.length){$('inviteList').innerHTML='<p style="color:var(--slate);line-height:1.6">No guests found.</p>';}else{$('inviteList').innerHTML=list.map(function(g){var sel=inviteSel.has(g.id);var hasPh=!!(g.phone&&g.phone.trim());var hasEm=!!(g.email&&g.email.trim());var phTag=hasPh?'<span style="background:#e8f5e9;color:#2e7d32;border-radius:4px;padding:1px 6px;font-size:10px;margin-right:3px">📱 '+esc(g.phone)+'</span>':'<span style="background:#fce4ec;color:#c62828;border-radius:4px;padding:1px 6px;font-size:10px;margin-right:3px">No phone</span>';var emTag=hasEm?'<span style="background:#e3f2fd;color:#1565c0;border-radius:4px;padding:1px 6px;font-size:10px">✉ '+esc(g.email)+'</span>':'<span style="background:#fce4ec;color:#c62828;border-radius:4px;padding:1px 6px;font-size:10px">No email</span>';var sentTag=g.inviteStatus==='Sent'?'<span style="background:#e8f5e9;color:#2e7d32;border-radius:4px;padding:1px 6px;font-size:10px;margin-left:4px">✓ Sent</span>':'';return'<div class="guest-chip '+(sel?'sel':'')+' " onclick="toggleInvite(\''+g.id+'\')">'+'<div class="check">'+(sel?'✓':'')+'</div>'+'<div class="avatar" style="background:'+hostColor(g.host)+'">'+initials(g.name)+'</div>'+'<div style="min-width:0;flex:1"><div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap"><b>'+esc(g.name)+'</b>'+sentTag+'</div><div style="margin-top:3px">'+phTag+emTag+'</div><small style="color:var(--slate)">'+esc(normalizeHost(g.host))+'</small></div></div>';}).join('');if(!selectedGuestId||!guests.find(function(g){return g.id===selectedGuestId;})){selectedGuestId=list[0].id;}}renderCard();}
 function toggleInvite(id){if(inviteSel.has(id))inviteSel.delete(id);else inviteSel.add(id);selectedGuestId=id;renderInvites()}function selectAllInvites(){let h=$('inviteHost').value||'';guests.filter(g=>sameHost(g.host,h)).forEach(g=>inviteSel.add(g.id));if(!selectedGuestId){let first=guests.find(g=>sameHost(g.host,h));if(first)selectedGuestId=first.id;}renderInvites()}function clearSelection(){inviteSel.clear();renderInvites()}function deleteGuest(id){let g=guests.find(x=>x.id===id);if(!g)return;if(!confirm('Delete '+g.name+'?'))return;guests=guests.filter(x=>x.id!==id);save();renderAll();toast(g.name+' deleted','ok')}
 function openCard(id){selectedGuestId=id;inviteSel.add(id);show('invites');renderInvites()}
 function getCheckinUrl(accessCode){

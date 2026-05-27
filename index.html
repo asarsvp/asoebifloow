@@ -1402,11 +1402,21 @@ main{max-width:1180px;margin:auto;padding:18px 16px 70px}.panel{display:none}.pa
   top:72.9%;
   font-weight:800;
 }
-/* Guest name — centered below NAME OF GUEST, on the printed guest line */
+/* Guest name — DO NOT change top position, just bigger and bolder */
 .real-guest-overlay{
   top:87.2%;
+  height:10%;
   font-weight:900;
-  font-size:clamp(11px,1.25vw,18px);
+  font-size:clamp(14px,1.8vw,22px);
+  line-height:1.25;
+  white-space:normal;
+  word-break:break-word;
+  overflow:hidden;
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  text-align:center;
+  padding:0 8px;
 }
 
 /* RSVP patch: covers the old number space only and keeps both phone numbers inside the RSVP box */

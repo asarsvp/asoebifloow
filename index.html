@@ -1289,12 +1289,13 @@ function finalRenderByTable(){
   const tables = finalBuildTables().filter(t => !selectValue || t.host === selectValue);
   const hosts = [...new Set(finalBuildTables().map(t=>t.host))].sort();
   target.innerHTML = `
-    <div class="coord-filterbar">
-      <select class="search" id="finalSeatHostFilter" onchange="finalRenderByTable()">
+    <div class="coord-filterbar" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">
+      <select class="search" id="finalSeatHostFilter" onchange="finalRenderByTable()" style="flex:1;min-width:180px">
         <option value="">All Guest Of groups</option>
         ${hosts.map(h=>`<option value="${esc(h)}" ${h===selectValue?'selected':''}>${esc(h)}</option>`).join('')}
       </select>
-      <button class="btn ghost sm" onclick="window.print()">🖨 Print</button>
+      <button class="btn gold sm" onclick="autoAssignTables()">⚡ Auto-Assign Tables</button>
+      <button class="btn navy sm" onclick="printTableMap()">🖨 Print Table Map</button>
     </div>
     <div class="tbl-grid">
       ${tables.map(t => {
@@ -1404,7 +1405,8 @@ main{max-width:1180px;margin:auto;padding:18px 16px 70px}.panel{display:none}.pa
 /* Guest name — centered below NAME OF GUEST, on the printed guest line */
 .real-guest-overlay{
   top:87.2%;
-  font-weight:800;
+  font-weight:900;
+  font-size:clamp(11px,1.25vw,18px);
 }
 
 /* RSVP patch: covers the old number space only and keeps both phone numbers inside the RSVP box */
@@ -2386,7 +2388,10 @@ async function load() {
         if (dbContribs.length) contributions = dbContribs;
         if (dbTasks.length)    tasks         = dbTasks;
 
+        _saveLocal();
         setSyncStatus('✓ Synced', 'ok');
+      } else {
+        setSyncStatus('⚠ Event not found in Supabase', 'err');
       }
     } catch(e) {
       setSyncStatus('⚠ Offline — using local data', 'err');
@@ -2415,10 +2420,70 @@ async function _saveToSupabase() {
   } catch(e) { console.warn('Supabase save error:', e); }
 }
 
+// ── AUTO-SAVE ENGINE ─────────────────────────────────────────────────────────
+// Saves instantly to localStorage (offline backup)
+// Then pushes to Supabase in background — no waiting needed
+// If save fails, retries automatically every 5 seconds
+// On next app open, any unsaved changes are pushed immediately
+
+let _saveQueue   = false;  // true = a save is waiting to be sent
+let _savePending = false;  // true = currently sending to Supabase
+let _saveTimer   = null;
+
 function save() {
+  // 1. Save to localStorage INSTANTLY (no waiting, immediate backup)
   _saveLocal();
-  _saveToSupabase(); // fire and forget — non-blocking
+
+  // 2. Mark that Supabase needs an update
+  _saveQueue = true;
+
+  // 3. Debounce — wait 800ms then flush to Supabase
+  //    This batches rapid changes (e.g. 10 quick edits = 1 network call)
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(_flushToSupabase, 800);
 }
+
+async function _flushToSupabase() {
+  if (!SUPA_ENABLED || !EVENT_ID || _savePending) return;
+  if (!_saveQueue) return;
+
+  _savePending = true;
+  _saveQueue   = false;
+  setSyncStatus('💾 Syncing…');
+
+  try {
+    await _saveToSupabase();
+    setSyncStatus('✓ Saved', 'ok');
+  } catch(e) {
+    console.warn('Supabase save failed, will retry:', e);
+    setSyncStatus('⚠ Will retry…', 'err');
+    _saveQueue = true; // mark for retry
+  } finally {
+    _savePending = false;
+    // If more changes came in while saving, flush again
+    if (_saveQueue) {
+      _saveTimer = setTimeout(_flushToSupabase, 2000);
+    }
+  }
+}
+
+// Auto-retry every 5 seconds if there are unsaved changes
+setInterval(function() {
+  if (_saveQueue && !_savePending && SUPA_ENABLED && EVENT_ID) {
+    _flushToSupabase();
+  }
+}, 5000);
+
+// On page load, push any localStorage changes that didn't make it to Supabase
+// (covers the case where browser was closed mid-save)
+window.addEventListener('load', function() {
+  setTimeout(function() {
+    if (SUPA_ENABLED && EVENT_ID && guests.length) {
+      _saveQueue = true;
+      _flushToSupabase();
+    }
+  }, 3000);
+});
  function buildTables(){tables=[];HOSTS.forEach(h=>{for(let i=1;i<=7;i++)tables.push({id:uid(),host:h,code:`${PFX[h]}-${String(i).padStart(2,'0')}`,capacity:10,note:''})})}
 function cleanPhone(v){return String(v||'').replace(/[^0-9+]/g,'').trim()}
 function phoneDigits(v){return String(v||'').replace(/\D/g,'')}

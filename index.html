@@ -3600,5 +3600,173 @@ load();renderAll();let params=new URLSearchParams(location.search);if(params.get
 })();
 
 </script>
+
+
+<script>
+/* ============================================================
+   EMERGENCY SUPABASE PERMANENT SAVE PATCH — 2026-05-28
+   Fixes new guest rows not inserting because old makeGuest() used
+   short text IDs, while Supabase guests.id is UUID.
+============================================================ */
+(function(){
+  const FIXED_EVENT_ID = 'b1c5429b-bb23-4477-bb11-eff4887337b5';
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const oldUid = typeof uid === 'function' ? uid : (() => Math.random().toString(36).slice(2,9).toUpperCase());
+  const safeUuid = () => (crypto && crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0, v = c === 'x' ? r : (r&0x3|0x8);
+    return v.toString(16);
+  }));
+  const getEventId = () => (typeof EVENT_ID !== 'undefined' && EVENT_ID) ? EVENT_ID : FIXED_EVENT_ID;
+  const setMsg = (m,t='info') => { try { if(typeof setSyncStatus === 'function') setSyncStatus(m,t); else if(typeof toast === 'function') toast(m,t); } catch(e){} };
+
+  window.ensureGuestUuid = function(g){
+    if(!g) return g;
+    if(!g.id || !uuidRe.test(String(g.id))) g.id = safeUuid();
+    return g;
+  };
+
+  window.guestToDbSafe = function(g){
+    window.ensureGuestUuid(g);
+    return {
+      id: g.id,
+      event_id: getEventId(),
+      name: g.name || 'Unnamed Guest',
+      phone: g.phone || null,
+      email: g.email || null,
+      host_group: g.host_group || g.guest_of || g.host || 'Needs Host Assignment',
+      table_code: g.table_code || g.table || null,
+      seat: g.seat || null,
+      access_code: g.access_code || g.accessCode || ('ASO-2026-' + oldUid()),
+      invite_status: g.invite_status || g.inviteStatus || 'Pending',
+      arrived: !!g.arrived,
+      arrived_at: g.arrived_at || g.arrivedAt || null,
+      payment_status: g.payment_status || g.paymentStatus || 'Unknown',
+      amount: Number(g.amount || 0),
+      source: g.source || 'Manual',
+      notes: g.notes || null,
+      is_walk_in: g.is_walk_in || g.source === 'Walk-in',
+      updated_at: new Date().toISOString()
+    };
+  };
+
+  // Replace the old converter globally so batch save uses the correct UUID-safe payload.
+  window.guestToDb = window.guestToDbSafe;
+  try { guestToDb = window.guestToDbSafe; } catch(e) {}
+
+  // Replace makeGuest so every new manual/imported/walk-in guest gets a valid Supabase UUID.
+  const oldMakeGuest = typeof makeGuest === 'function' ? makeGuest : null;
+  window.makeGuest = function(o={}){
+    const g = oldMakeGuest ? oldMakeGuest(o) : {
+      id: o.id,
+      name: o.name || 'Unnamed Guest',
+      phone: typeof cleanPhone === 'function' ? cleanPhone(o.phone||'') : (o.phone||''),
+      email: o.email || '',
+      host: o.host || o.host_group || 'Needs Host Assignment',
+      table: o.table || o.table_code || '',
+      seat: o.seat || '',
+      accessCode: o.accessCode || o.access_code || `ASO-2026-${oldUid()}`,
+      inviteStatus: o.inviteStatus || o.invite_status || 'Pending',
+      arrived: !!o.arrived,
+      arrivedAt: o.arrivedAt || o.arrived_at || '',
+      paymentStatus: o.paymentStatus || o.payment_status || 'Unknown',
+      amount: Number(o.amount || 0),
+      source: o.source || 'Manual',
+      notes: o.notes || ''
+    };
+    if(o.host_group && !g.host) g.host = o.host_group;
+    if(o.table_code && !g.table) g.table = o.table_code;
+    return window.ensureGuestUuid(g);
+  };
+  try { makeGuest = window.makeGuest; } catch(e) {}
+
+  // Make Supabase upsert fail loudly instead of only console.warn.
+  if(typeof supa !== 'undefined' && supa && !supa.__emergencyPatched){
+    supa.__emergencyPatched = true;
+    const headers = supa.headers.bind(supa);
+    supa.upsert = async function(table, rows){
+      if(!rows || !rows.length) return [];
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+        method: 'POST',
+        headers: { ...headers(), 'Prefer': 'resolution=merge-duplicates,return=representation' },
+        body: JSON.stringify(rows)
+      });
+      const text = await r.text();
+      if(!r.ok) throw new Error(`Supabase ${table} save failed: ${text}`);
+      try { return text ? JSON.parse(text) : []; } catch(e){ return []; }
+    };
+  }
+
+  window.saveGuestToSupabase = async function(g){
+    if(!g) return false;
+    window.ensureGuestUuid(g);
+    try{
+      if(typeof SUPA_ENABLED !== 'undefined' && !SUPA_ENABLED && typeof SUPABASE_URL !== 'undefined') SUPA_ENABLED = true;
+      if(typeof EVENT_ID !== 'undefined' && !EVENT_ID) EVENT_ID = FIXED_EVENT_ID;
+      if(typeof supa === 'undefined' || !supa) throw new Error('Supabase helper not available');
+      await supa.upsert('guests', [window.guestToDbSafe(g)]);
+      setMsg('✓ Guest saved to Supabase','ok');
+      return true;
+    }catch(err){
+      console.error('Guest Supabase save failed:', err);
+      setMsg('⚠ Guest not saved to Supabase — check console/error','err');
+      if(typeof toast === 'function') toast('Guest save failed: ' + (err.message || err), 'err');
+      return false;
+    }
+  };
+
+  const oldSave = typeof save === 'function' ? save : null;
+  window.save = function(){
+    try { if(Array.isArray(guests)) guests.forEach(window.ensureGuestUuid); } catch(e){}
+    if(oldSave) return oldSave.apply(this, arguments);
+    try { if(typeof _saveLocal === 'function') _saveLocal(); } catch(e){}
+  };
+  try { save = window.save; } catch(e) {}
+
+  // Override manual Add Guest to save immediately to Supabase and show failure clearly.
+  window.addGuest = async function(){
+    const name = document.getElementById('gName')?.value.trim();
+    if(!name) return toast('Name required','err');
+    const host = document.getElementById('gHost')?.value;
+    if(!host) return toast('Please select Guest Of','err');
+    const phoneVal = document.getElementById('gPhone')?.value || '';
+    if(typeof validPhone === 'function' && !validPhone(phoneVal)) return toast('Enter a correct phone number before adding this guest','err');
+    const g = window.makeGuest({
+      name,
+      phone: phoneVal,
+      email: document.getElementById('gEmail')?.value || '',
+      host,
+      paymentStatus: document.getElementById('gPay')?.value || 'Unknown',
+      amount: document.getElementById('gAmt')?.value || 0,
+      source: 'Manual'
+    });
+    guests.push(g);
+    if(typeof autoSeatGuest === 'function') autoSeatGuest(g);
+    if(typeof clearGuestForm === 'function') clearGuestForm();
+    if(typeof _saveLocal === 'function') _saveLocal();
+    const ok = await window.saveGuestToSupabase(g);
+    if(typeof renderAll === 'function') renderAll();
+    toast(ok ? 'Guest added and saved permanently' : 'Guest added on this device only — Supabase failed', ok ? 'ok' : 'err');
+    if(ok && typeof save === 'function') save();
+  };
+
+  // Emergency test helper: run from browser console if needed.
+  window.testSupabaseGuestSave = async function(){
+    const g = window.makeGuest({name:'SAVE TEST ' + new Date().toLocaleString(), phone:'08000000000', host:'Paul Asa', source:'Emergency Test'});
+    guests.push(g);
+    if(typeof _saveLocal === 'function') _saveLocal();
+    await window.saveGuestToSupabase(g);
+    if(typeof renderAll === 'function') renderAll();
+    return g;
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      try { if(typeof EVENT_ID !== 'undefined' && !EVENT_ID) EVENT_ID = FIXED_EVENT_ID; } catch(e){}
+      setMsg('Permanent save patch loaded','ok');
+    }, 1200);
+  });
+})();
+</script>
+
 </body>
 </html>
